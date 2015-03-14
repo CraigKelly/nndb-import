@@ -11,9 +11,9 @@ X   NUT_DATA  nutrient data
     WEIGHT    weights
     FOOTNOTE  footnotes
     --------
-    FD_GROUP  food group descriptions
-    LANGUAL   LanguaL Factors
-    LANGDESC  LanguaL Factors descriptions
+X   FD_GROUP  food group descriptions
+X   LANGUAL   LanguaL Factors
+X   LANGDESC  LanguaL Factors descriptions
 X   NUTR_DEF  Nutrient definitions
     SRC_CD    source code
     DERIV_CD  data derivation code description
@@ -68,11 +68,11 @@ def recs_to_dict(keyfldname, recs):
 
 food_des_recs = functools.partial(nndb_recs, field_names = [
     "_id", #aka NDB_No
-    "food_group_code", #
-    "descrip", #
-    "short_descrip", #
-    "common_name", #
-    "mfg_name", #
+    "food_group_code", #references the food group descriptions
+    "descrip",
+    "short_descrip",
+    "common_name",
+    "mfg_name",
     "survey", #if used in FNDDS (if so, nutrient data should be complete)
     "refuse_descrip", #description of inedible parts (seed, bone, etc)
     "refuse", #percentage of refuse
@@ -84,7 +84,7 @@ food_des_recs = functools.partial(nndb_recs, field_names = [
 ])
 
 nut_data_recs = functools.partial(nndb_recs, field_names = [
-    "ndn_num", #aka NDB_No, the _id to FOOD_DES
+    "ndb_num", #aka NDB_No, the _id to FOOD_DES
     "nutrient_id", #aka Nutr_No
     "nutrient_val", #Num edible portion in 100g
     "data_point_count", #Num data points used for analysis (0 means calc, etc)
@@ -133,6 +133,19 @@ def process_directory(mongo, dirname):
     #Shorten our code a little
     get_fn = lambda fn: os.path.join(dirname, fn)
 
+    #Read in various dictionaries we need first
+    print "Reading food group codes"
+    food_grp_codes = {"": ""}
+    for fg in nndb_recs(get_fn("FD_GROUP.txt"), ["code", "descrip"]):
+        food_grp_codes[fg["code"]] = fg["descrip"]
+
+    print "Reading LanguaL codes"
+    langual_codes = recs_to_dict(
+        "code",
+        nndb_recs(get_fn("LANGDESC.txt"), ["code", "descrip"])
+    )
+    langual_codes[""] = ""
+
     #First create all the entries with default values from the main file
     #Note that we use upsert - one of main goals is to be restartable and
     #re-runnable.
@@ -141,13 +154,13 @@ def process_directory(mongo, dirname):
     survey_stats = collections.defaultdict(int, [("", 0), ("Y", 0)])
     for entry in food_des_recs(get_fn("FOOD_DES.txt")):
         #Just in case we ever decide to use something else for _id
-        entry['nbd_num'] = entry['_id']
+        entry['ndb_num'] = entry['_id']
         #Handle numeric fields
         nums(entry, ["n_factor", "protein_factor", "fat_factor", "carb_factor"])
         #Setup defaults
         entry.update({
             'nutrients': list(),
-            'food_group_descrip': '', #TODO: pre-read these
+            'food_group_descrip': food_grp_codes[entry["food_group_code"]],
             'footnotes': list(),
             'langual_entries': list(),
             'measures': list(),
@@ -161,11 +174,24 @@ def process_directory(mongo, dirname):
         if count % 3000 == 0:
             print "  Created %7d" % count
 
-    print "...Total Created %7d" % count
+    print "...Total Created: %d" % count
     print "Survey stats:"
     for k,v in survey_stats.iteritems():
         print "  %4s: %12d" % (k,v)
     print ""
+
+    print "Loading LanguaL Codes..."
+    count = 0
+    for entry in nndb_recs(get_fn("LANGUAL.txt"), ["ndb_num", "code"]):
+        lang = langual_codes[entry["code"]]
+        mongo.update(
+            { "_id": entry["ndb_num"] },
+            { "$push": {"langual_entries": lang} }
+        )
+        count += 1
+        if count % 10000 == 0:
+            print "  LanguaL items: %7d" % count
+    print "...Total codes read: %d"
 
     print "Reading nutrient defs..."
     nutr_defs = recs_to_dict(
@@ -191,7 +217,7 @@ def process_directory(mongo, dirname):
         entry.update(xtra)
 
         mongo.update(
-            { "_id": entry["ndn_num"] },
+            { "_id": entry["ndb_num"] },
             { "$push": {"nutrients": entry} }
         )
         count += 1

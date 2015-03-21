@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# -*- coding: latin_1 -*-
+
+# Note that the file encoding we use is the same as the ASCII files -
+# see nndb_recs below
 
 # TODO: we're going to want a check that all nutrients in an entry have their
 #       seq num equal to their array index in nutrients
@@ -38,7 +42,14 @@ except:
     sys.stderr.write("\n\nCould not import PyMongo - it is required\n\n")
     raise
 
-# Use the unit abbreviations we like
+
+# Use the unit abbreviations we like - this means that the units to expect are:
+#   mcg  - micrograms
+#   mg   - milligrams
+#   g    - grams
+#   IU   - Intl Units
+#   kcal - kilocalories
+#   kJ   - kilojoules
 UNIT_REPLACEMENTS = {
     "Âµg": "mcg"   # micrograms
 }

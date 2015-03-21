@@ -1,25 +1,28 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """nndb-import.py
 """
 
-# TODO: handle all these files:
+"""
+These are the files that we support as documented in the file sr27_doc.pdf
+as given in the SR27 distribution of these files. The four files identified
+as the four "principal" files are the first four listed:
 
-""" Name      Descrip
-    ========= ==========================================
-X   FOOD_DES  food descriptions
-X   NUT_DATA  nutrient data
-    WEIGHT    weights
-X   FOOTNOTE  footnotes
-    --------
-X   FD_GROUP  food group descriptions
-X   LANGUAL   LanguaL Factors
-X   LANGDESC  LanguaL Factors descriptions
-X   NUTR_DEF  Nutrient definitions
-X   SRC_CD    source code
-X   DERIV_CD  data derivation code description
-X   DATA_SRC  Sources of data
-X   DATSRCLN  Sources of data Link
+   Name      Descrip
+   ========= ==========================================
+   FOOD_DES  food descriptions
+   NUT_DATA  nutrient data
+   WEIGHT    weights
+   FOOTNOTE  footnotes
+   --------
+   FD_GROUP  food group descriptions
+   LANGUAL   LanguaL Factors
+   LANGDESC  LanguaL Factors descriptions
+   NUTR_DEF  Nutrient definitions
+   SRC_CD    source code
+   DERIV_CD  data derivation code description
+   DATA_SRC  Sources of data
+   DATSRCLN  Sources of data Link
 """
 
 import sys
@@ -49,7 +52,11 @@ def nndb_recs(filename, field_names=None):
             f = f[1:-1]
         return f
 
-    with open(filename, "r") as datafile:
+    # Note the encoding - the documentation says the files are in
+    # "ASCII (ISO/IEC 8859-1)" which might make you think you could assume
+    # an encoding of ASCII or UTF-8, but they actually do use 8859-1 (latin_1)
+    # characters that are not valid ASCII or UTF-8.
+    with open(filename, "r", encoding="latin_1") as datafile:
         for line in datafile:
             line = line.strip()
             if len(line) < 1:
@@ -193,6 +200,27 @@ def process_directory(mongo, dirname):
         print("  %4s: %12d" % (k, v))
     print("")
 
+    print("Loading weights/measures")
+    weight_recs = nndb_recs(get_fn("WEIGHT.txt"), [
+        "ndb_num",
+        "seq",
+        "amount",
+        "descrip",
+        "gram_weight",
+        "num_data_points",
+        "stddev"
+    ])
+    count = 0
+    for entry in weight_recs:
+        mongo.update(
+            {"_id": entry["ndb_num"]},
+            {"$push": {"measures": entry}}
+        )
+        count += 1
+        if count % 10000 == 0:
+            print("  weights: %7d" % count)
+    print("...Total weights read: %d" % count)
+
     print("Loading LanguaL Codes...")
     count = 0
     for entry in nndb_recs(get_fn("LANGUAL.txt"), ["ndb_num", "code"]):
@@ -204,7 +232,7 @@ def process_directory(mongo, dirname):
         count += 1
         if count % 10000 == 0:
             print("  LanguaL items: %7d" % count)
-    print("...Total codes read: %d")
+    print("...Total codes read: %d" % count)
 
     print("Reading source code descrips")
     src_codes = recs_to_lookup(get_fn("SRC_CD.txt"))

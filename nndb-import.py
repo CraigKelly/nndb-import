@@ -10,7 +10,7 @@
 X   FOOD_DES  food descriptions
 X   NUT_DATA  nutrient data
     WEIGHT    weights
-    FOOTNOTE  footnotes
+X   FOOTNOTE  footnotes
     --------
 X   FD_GROUP  food group descriptions
 X   LANGUAL   LanguaL Factors
@@ -18,8 +18,8 @@ X   LANGDESC  LanguaL Factors descriptions
 X   NUTR_DEF  Nutrient definitions
 X   SRC_CD    source code
 X   DERIV_CD  data derivation code description
-    DATA_SRC  Sources of data
-    DATSRCLN  Sources of data Link
+X   DATA_SRC  Sources of data
+X   DATSRCLN  Sources of data Link
 """
 
 import sys
@@ -49,15 +49,15 @@ def nndb_recs(filename, field_names=None):
             f = f[1:-1]
         return f
 
-    for line in open(filename, "r"):
-        line = line.strip()
-        if len(line) < 1:
-            continue
-        line = line.decode("utf-8", "ignore")
-        yield dict([
-            (name, filt(fld))
-            for name, fld in zip(field_names, line.split('^'))
-        ])
+    with open(filename, "r") as datafile:
+        for line in datafile:
+            line = line.strip()
+            if len(line) < 1:
+                continue
+            yield dict([
+                (name, filt(fld))
+                for name, fld in zip(field_names, line.split('^'))
+            ])
 
 
 def recs_to_dict(keyfldname, recs):
@@ -149,10 +149,10 @@ def process_directory(mongo, dirname):
     get_fn = lambda fn: os.path.join(dirname, fn)
 
     # Read in various dictionaries we need first
-    print "Reading food group codes"
+    print("Reading food group codes")
     food_grp_codes = recs_to_lookup(get_fn("FD_GROUP.txt"))
 
-    print "Reading LanguaL codes"
+    print("Reading LanguaL codes")
     langual_codes = recs_to_dict(
         "code",
         nndb_recs(get_fn("LANGDESC.txt"), ["code", "descrip"])
@@ -162,7 +162,7 @@ def process_directory(mongo, dirname):
     # First create all the entries with default values from the main file
     # Note that we use upsert - one of main goals is to be restartable and
     # re-runnable.
-    print "Creating entries..."
+    print("Creating entries...")
     count = 0
     survey_stats = collections.defaultdict(int, [("", 0), ("Y", 0)])
     for entry in food_des_recs(get_fn("FOOD_DES.txt")):
@@ -185,15 +185,15 @@ def process_directory(mongo, dirname):
         count += 1
         survey_stats[entry['survey']] += 1
         if count % 3000 == 0:
-            print "  Created %7d" % count
+            print("  Created %7d" % count)
 
-    print "...Total Created: %d" % count
-    print "Survey stats:"
-    for k, v in survey_stats.iteritems():
-        print "  %4s: %12d" % (k, v)
-    print ""
+    print("...Total Created: %d" % count)
+    print("Survey stats:")
+    for k, v in survey_stats.items():
+        print("  %4s: %12d" % (k, v))
+    print("")
 
-    print "Loading LanguaL Codes..."
+    print("Loading LanguaL Codes...")
     count = 0
     for entry in nndb_recs(get_fn("LANGUAL.txt"), ["ndb_num", "code"]):
         lang = langual_codes[entry["code"]]
@@ -203,22 +203,69 @@ def process_directory(mongo, dirname):
         )
         count += 1
         if count % 10000 == 0:
-            print "  LanguaL items: %7d" % count
-    print "...Total codes read: %d"
+            print("  LanguaL items: %7d" % count)
+    print("...Total codes read: %d")
 
-    print "Reading source code descrips"
+    print("Reading source code descrips")
     src_codes = recs_to_lookup(get_fn("SRC_CD.txt"))
 
-    print "Reading data derivation code descrips"
+    print("Reading data derivation code descrips")
     deriv_codes = recs_to_lookup(get_fn("DERIV_CD.txt"))
 
-    print "Reading nutrient defs..."
+    print("Reading data sources for footnotes")
+    data_srcs = recs_to_dict("datasrc_id", nndb_recs(get_fn("DATA_SRC.txt"), [
+        "datasrc_id",
+        "authors",
+        "title",
+        "year",
+        "journal",
+        "vol_city",
+        "issue_state",
+        "start_page",
+        "end_page",
+    ]))
+
+    print("Adding footnotes to food items...")
+    footnote_recs = nndb_recs(get_fn("FOOTNOTE.txt"), [
+        "ndb_num",
+        "footnote_num",
+        "footnote_type",
+        "nutr_num",
+        "text"
+    ])
+    count = 0
+    for entry in footnote_recs:
+        entry["type"] = "footnote"
+        mongo.update(
+            {"_id": entry["ndb_num"]},
+            {"$push": {"footnotes": entry}}
+        )
+        count += 1
+        if count % 50000 == 0:
+            print("  footnotes: %7d" % count)
+    print("...Total foot notes: %7d" % count)
+
+    print("Adding data sources to food items as footnotes...")
+    count = 0
+    for entry in nndb_recs(get_fn("DATSRCLN.txt"), ["ndb_num", "nutr_num", "datasrc_id"]):
+        entry.update(data_srcs[entry["datasrc_id"]])
+        entry["type"] = "data-source"
+        mongo.update(
+            {"_id": entry["ndb_num"]},
+            {"$push": {"footnotes": entry}}
+        )
+        count += 1
+        if count % 50000 == 0:
+            print("  data sources: %7d" % count)
+    print("...Total data sources: %7d" % count)
+
+    print("Reading nutrient defs...")
     nutr_defs = recs_to_dict(
         "nutrient_id",
         nutr_def_recs(get_fn("NUTR_DEF.txt"))
     )
 
-    print "Loading nutrition items..."
+    print("Loading nutrition items...")
     count = 0
     for entry in nut_data_recs(get_fn("NUT_DATA.txt")):
         nums(entry, [
@@ -245,8 +292,8 @@ def process_directory(mongo, dirname):
         )
         count += 1
         if count % 50000 == 0:
-            print "  nutrient items: %7d" % count
-    print "...Total nutrient items: %7d" % count
+            print("  nutrient items: %7d" % count)
+    print("...Total nutrient items: %7d" % count)
 
 
 # TODO: we're going to want a check that all nutrients in an entry have their
@@ -270,14 +317,14 @@ def main():
     )
     args = parser.parse_args()
 
-    print args.targetdir
+    print(args.targetdir)
 
-    print "Connecting to %s" % args.mongourl
+    print("Connecting to %s" % args.mongourl)
     client = pymongo.MongoClient(args.mongourl)
     db = client.get_default_database()
-    print "Using collection %s" % args.collection
+    print("Using collection %s" % args.collection)
     coll = db[args.collection]
-    print "Processing files using directory %s" % args.targetdir
+    print("Processing files using directory %s" % args.targetdir)
     process_directory(coll, args.targetdir)
 
 

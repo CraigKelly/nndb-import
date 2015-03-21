@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-# TODO: translate microgram abbreviation "Âµg" to something easier to type
-
 # TODO: we're going to want a check that all nutrients in an entry have their
 #       seq num equal to their array index in nutrients
 
@@ -39,6 +37,11 @@ try:
 except:
     sys.stderr.write("\n\nCould not import PyMongo - it is required\n\n")
     raise
+
+# Use the unit abbreviations we like
+UNIT_REPLACEMENTS = {
+    "Âµg": "mcg"   # micrograms
+}
 
 
 def nndb_recs(filename, field_names=None):
@@ -316,6 +319,9 @@ def process_directory(mongo, dirname):
         # Just add the nutrient def info to the entry
         xtra = nutr_defs[entry["nutrient_id"]]
         entry.update(xtra)
+
+        # Ensure units are the way we want them
+        entry["units"] = UNIT_REPLACEMENTS.get(entry["units"], entry["units"])
 
         mongo.update(
             {"_id": entry["ndb_num"]},

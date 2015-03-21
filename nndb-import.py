@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
-"""nndb-import.py
-"""
+# TODO: translate microgram abbreviation "Âµg" to something easier to type
 
-"""
+# TODO: we're going to want a check that all nutrients in an entry have their
+#       seq num equal to their array index in nutrients
+
+"""nndb-import.py
+
 These are the files that we support as documented in the file sr27_doc.pdf
 as given in the SR27 distribution of these files. The four files identified
 as the four "principal" files are the first four listed:
@@ -323,9 +326,6 @@ def process_directory(mongo, dirname):
             print("  nutrient items: %7d" % count)
     print("...Total nutrient items: %7d" % count)
 
-
-# TODO: we're going to want a check that all nutrients in an entry have their
-#       seq num equal to their array index in nutrients
 
 def main():
     parser = argparse.ArgumentParser()

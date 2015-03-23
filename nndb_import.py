@@ -51,7 +51,8 @@ except:
 #   kcal - kilocalories
 #   kJ   - kilojoules
 UNIT_REPLACEMENTS = {
-    "Âµg": "mcg"   # micrograms
+    "µg": "mcg",   # micrograms
+    "�g":  "mcg",
 }
 
 

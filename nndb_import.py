@@ -117,7 +117,7 @@ food_des_recs = functools.partial(nndb_recs, field_names=[
     "n_factor",  # factor for nitrogen to protein
     "protein_factor",  # factor for calories from protein
     "fat_factor",  # factor for calories from fat
-    "carb_facto",  # factor for calories from carbohydrates
+    "carb_factor",  # factor for calories from carbohydrates
 ])
 
 nut_data_recs = functools.partial(nndb_recs, field_names=[

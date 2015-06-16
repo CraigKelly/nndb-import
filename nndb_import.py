@@ -36,11 +36,19 @@ import argparse
 import collections
 import functools
 
+
+class BulkFailure(Exception):
+    pass
+
+
 try:
     import pymongo
 except:
     sys.stderr.write("\n\nCould not import PyMongo - it is required\n\n")
     raise
+if (2, 6) > tuple([int(i) for i in getattr(pymongo, 'version', '0.0.0').split('.')][:2]):
+    sys.stderr.write("\n\nNeed at version 2.6 of PyMongo because we use bulk loading\n\n")
+    raise BulkFailure("PyMongo version too low")
 
 
 # Use the unit abbreviations we like - this means that the units to expect are:
@@ -54,6 +62,13 @@ UNIT_REPLACEMENTS = {
     "Âµg": "mcg",   # micrograms
     "µg":  "mcg",
 }
+
+
+def report_bulk(results):
+    from pprint import pprint
+    pprint(results)
+    if results.get('writeConcernErrors', []) or results.get('writeErrors', []):
+        raise BulkFailure("Failed on bulk insertion")
 
 
 def nndb_recs(filename, field_names=None):
@@ -103,6 +118,7 @@ def recs_to_lookup(filename):
         d[flds["key"]] = flds["val"]
     return d
 
+
 food_des_recs = functools.partial(nndb_recs, field_names=[
     "_id",  # aka NDB_No
     "food_group_code",  # references the food group descriptions
@@ -119,6 +135,7 @@ food_des_recs = functools.partial(nndb_recs, field_names=[
     "fat_factor",  # factor for calories from fat
     "carb_factor",  # factor for calories from carbohydrates
 ])
+
 
 nut_data_recs = functools.partial(nndb_recs, field_names=[
     "ndb_num",  # aka NDB_No, the _id to FOOD_DES
@@ -139,6 +156,7 @@ nut_data_recs = functools.partial(nndb_recs, field_names=[
     "statistical_comments",
     "confidence_code",  # Indicates overall assessment of quality for sampling, etc
 ])
+
 
 nutr_def_recs = functools.partial(nndb_recs, field_names=[
     "nutrient_id",  # aka Nutr_No
@@ -184,17 +202,29 @@ def process_directory(mongo, dirname):
     )
     langual_codes[""] = ""
 
+    # Clearing previous entries
+    print("Clearing database")
+    bulk = mongo.initialize_ordered_bulk_op()
+    bulk.find({}).remove()
+    report_bulk(bulk.execute())
+
     # First create all the entries with default values from the main file
     # Note that we use upsert - one of main goals is to be restartable and
     # re-runnable.
     print("Creating entries...")
     count = 0
+
     survey_stats = collections.defaultdict(int, [("", 0), ("Y", 0)])
+    entries = []
+
     for entry in food_des_recs(get_fn("FOOD_DES.txt")):
         # Just in case we ever decide to use something else for _id
-        entry['ndb_num'] = entry['_id']
+        entry_id = entry['_id']
+        entry['ndb_num'] = entry_id
+
         # Handle numeric fields
         nums(entry, ["n_factor", "protein_factor", "fat_factor", "carb_factor"])
+
         # Setup defaults
         entry.update({
             'nutrients': list(),
@@ -204,19 +234,28 @@ def process_directory(mongo, dirname):
             'measures': list(),
         })
 
-        # Upsert our entry (already have an _id, so this will be an upsert)
-        mongo.save(entry)
+        # Upsert our entry
+        entries.append(entry)
 
         count += 1
         survey_stats[entry['survey']] += 1
         if count % 3000 == 0:
             print("  Created %7d" % count)
 
-    print("...Total Created: %d" % count)
+    # Perform bulk operation
+    print("Sending bulked inserts")
+    total_inserts = len(mongo.insert_many(entries, False).inserted_ids)
+    entries = []   # Clean up
+
+    print("...Total Records Seen: %d" % count)
+    print("...Total Inserts Seen: %d" % total_inserts)
     print("Survey stats:")
     for k, v in survey_stats.items():
         print("  %4s: %12d" % (k, v))
     print("")
+
+    if count != total_inserts:
+        raise BulkFailure("Could not insert initial records")
 
     print("Loading weights/measures")
     weight_recs = nndb_recs(get_fn("WEIGHT.txt"), [
@@ -228,29 +267,32 @@ def process_directory(mongo, dirname):
         "num_data_points",
         "stddev"
     ])
+
+    bulk = mongo.initialize_unordered_bulk_op()
     count = 0
     for entry in weight_recs:
-        mongo.update(
-            {"_id": entry["ndb_num"]},
-            {"$push": {"measures": entry}}
-        )
+        bulk.find({'_id': entry["ndb_num"]}).update({"$push": {"measures": entry}})
         count += 1
         if count % 10000 == 0:
             print("  weights: %7d" % count)
     print("...Total weights read: %d" % count)
 
+    print("Bulk updating weights")
+    report_bulk(bulk.execute())
+
     print("Loading LanguaL Codes...")
+    bulk = mongo.initialize_unordered_bulk_op()
     count = 0
     for entry in nndb_recs(get_fn("LANGUAL.txt"), ["ndb_num", "code"]):
         lang = langual_codes[entry["code"]]
-        mongo.update(
-            {"_id": entry["ndb_num"]},
-            {"$push": {"langual_entries": lang}}
-        )
+        bulk.find({'_id': entry["ndb_num"]}).update({"$push": {"langual_entries": lang}})
         count += 1
         if count % 10000 == 0:
             print("  LanguaL items: %7d" % count)
     print("...Total codes read: %d" % count)
+
+    print("Bulk updating LanguaL codes")
+    report_bulk(bulk.execute())
 
     print("Reading source code descrips")
     src_codes = recs_to_lookup(get_fn("SRC_CD.txt"))
@@ -279,13 +321,11 @@ def process_directory(mongo, dirname):
         "nutr_num",
         "text"
     ])
+    bulk = mongo.initialize_unordered_bulk_op()
     count = 0
     for entry in footnote_recs:
         entry["type"] = "footnote"
-        mongo.update(
-            {"_id": entry["ndb_num"]},
-            {"$push": {"footnotes": entry}}
-        )
+        bulk.find({'_id': entry["ndb_num"]}).update({"$push": {"footnotes": entry}})
         count += 1
         if count % 50000 == 0:
             print("  footnotes: %7d" % count)
@@ -296,14 +336,14 @@ def process_directory(mongo, dirname):
     for entry in nndb_recs(get_fn("DATSRCLN.txt"), ["ndb_num", "nutr_num", "datasrc_id"]):
         entry.update(data_srcs[entry["datasrc_id"]])
         entry["type"] = "data-source"
-        mongo.update(
-            {"_id": entry["ndb_num"]},
-            {"$push": {"footnotes": entry}}
-        )
+        bulk.find({'_id': entry["ndb_num"]}).update({"$push": {"footnotes": entry}})
         count += 1
         if count % 50000 == 0:
             print("  data sources: %7d" % count)
     print("...Total data sources: %7d" % count)
+
+    print("Bulk updating footnotes")
+    report_bulk(bulk.execute())
 
     print("Reading nutrient defs...")
     nutr_defs = recs_to_dict(
@@ -312,6 +352,7 @@ def process_directory(mongo, dirname):
     )
 
     print("Loading nutrition items...")
+    bulk = mongo.initialize_unordered_bulk_op()
     count = 0
     for entry in nut_data_recs(get_fn("NUT_DATA.txt")):
         nums(entry, [
@@ -335,14 +376,14 @@ def process_directory(mongo, dirname):
         # Ensure units are the way we want them
         entry["units"] = UNIT_REPLACEMENTS.get(entry["units"], entry["units"])
 
-        mongo.update(
-            {"_id": entry["ndb_num"]},
-            {"$push": {"nutrients": entry}}
-        )
+        bulk.find({'_id': entry["ndb_num"]}).update({"$push": {"nutrients": entry}})
         count += 1
         if count % 50000 == 0:
             print("  nutrient items: %7d" % count)
     print("...Total nutrient items: %7d" % count)
+
+    print("Bulk updating nutrient items")
+    report_bulk(bulk.execute())
 
 
 def main():
@@ -358,7 +399,7 @@ def main():
     )
     parser.add_argument(
         "--collection",
-        help="The collection where the data will be loaded",
+        help="The collection where the data will be loaded (PREV DATA WILL BE DELETED)",
         default="nndb"
     )
     args = parser.parse_args()

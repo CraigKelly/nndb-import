@@ -4,9 +4,6 @@
 # Note that the file encoding we use is the same as the ASCII files -
 # see nndb_recs below
 
-# TODO: we're going to want a check that all nutrients in an entry have their
-#       seq num equal to their array index in nutrients
-
 """nndb-import.py
 
 These are the files that we support as documented in the file sr27_doc.pdf
@@ -38,8 +35,9 @@ import functools
 
 
 class BulkFailure(Exception):
-    pass
+    """Custom bulk import failure exception"""
 
+    pass
 
 try:
     import pymongo
@@ -60,11 +58,12 @@ if (2, 6) > tuple([int(i) for i in getattr(pymongo, 'version', '0.0.0').split('.
 #   kJ   - kilojoules
 UNIT_REPLACEMENTS = {
     "Âµg": "mcg",   # micrograms
-    "µg":  "mcg",
+    "ï¿½g":  "mcg",
 }
 
 
 def report_bulk(results):
+    """pretty print results and raise an exception if there is an error."""
     from pprint import pprint
     pprint(results)
     if results.get('writeConcernErrors', []) or results.get('writeErrors', []):
@@ -72,10 +71,9 @@ def report_bulk(results):
 
 
 def nndb_recs(filename, field_names=None):
-    """Iterator that yields a dictionary of (field-name,value) pairs. Note that
-    the order of field_names is important!
+    """Iterator that yields a dictionary of (field-name,value) pairs.
+    Note that the order of field_names is important!
     """
-
     if not field_names:
         raise ValueError("No fields specified for nndb recs")
 
@@ -141,8 +139,8 @@ nut_data_recs = functools.partial(nndb_recs, field_names=[
     "ndb_num",  # aka NDB_No, the _id to FOOD_DES
     "nutrient_id",  # aka Nutr_No
     "nutrient_val",  # Num edible portion in 100g
-    "data_point_count",  # Num data points used for analysis (0 means calc, etc)
-    "std_error",  # Num - std err of mean, can be null (if data_point_count < 3)
+    "data_point_count",  # Num data points used for analysis
+    "std_error",  # std err of mean, can be null (if data_point_count < 3)
     "source_code",
     "derivation_code",
     "ref_nbd_id",  # May refer to another item used to calc a missing value
@@ -154,7 +152,7 @@ nut_data_recs = functools.partial(nndb_recs, field_names=[
     "lower_err_bound",  # Num - lower 95% error bound
     "upper_err_bound",  # Num - lower 95% error bound
     "statistical_comments",
-    "confidence_code",  # Indicates overall assessment of quality for sampling, etc
+    "confidence_code",  # Indicates overall assessment of quality
 ])
 
 
@@ -181,15 +179,16 @@ def num(s, filt=float):
 
 
 def nums(rec, field_names, filt=float):
-    """Mutate rec using num (with filt) for all given field names
-    """
+    """Mutate rec using num (with filt) for all given field names."""
     for fn in field_names:
         rec[fn] = num(rec.get(fn, ""), filt=filt)
 
 
-def process_directory(mongo, dirname):
+def process_directory(mongo, dirname):  #NOQA (ignore McCabe for this func)
+    """Process single directory"""
     # Shorten our code a little
-    get_fn = lambda fn: os.path.join(dirname, fn)
+    def get_fn(fn):
+        return os.path.join(dirname, fn)
 
     # Read in various dictionaries we need first
     print("Reading food group codes")
@@ -387,6 +386,7 @@ def process_directory(mongo, dirname):
 
 
 def main():
+    """Entry point"""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "targetdir",

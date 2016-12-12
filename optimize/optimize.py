@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# pylama:ignore=D213,D400,E501,E221,D103,D205,D209,E124,E127,E128
+
 """Find optimal nutritional combinations
 
 This optimizer assumes that the foods to be targeted are in the file
@@ -66,6 +68,7 @@ def info(s, *args):
     if args:
         s = s % args
     print(s)
+
 
 FILTER_WORDS = [i.replace('\s', ' ') for i in """
     applesauce        mashed
@@ -149,9 +152,9 @@ class opt_engine(object):
     """Given a list of food objects from our file, perform the various
     optmization functions we want
     """
+
     def __init__(self, food_details):
-        """Load initial matrices and create initial expanded population
-        """
+        """Load initial matrices and create initial expanded population."""
         self.food_details = food_details
         self.food_count = len(food_details)
 
@@ -190,13 +193,13 @@ class opt_engine(object):
         self.last_popnutrition = []
 
     def set_pop(self, pop):
+        """Directly set population and recalc the pop-nutrition grid."""
         # |members| x |foods| 2-d array
         self.population = sp.array(pop)
         self.popnutrition = sp.dot(self.population, self.foods)
 
     def rand_inst(self):
-        """Return a random instance based on RND_EXP_ENTRIES and current foods
-        """
+        """Return a random instance based on RND_EXP_ENTRIES and current foods."""
         inst = [0.0] * self.food_count
 
         entries = self.rnd_entries()
@@ -213,8 +216,7 @@ class opt_engine(object):
         return inst
 
     def calories(self, inst):
-        """Given an instance, return the total calories and the total g's of sugar
-        """
+        """Given an instance, return the total calories and the total g's of sugar."""
         total_cals = 0.0
         total_sugar = 0.0
 
@@ -243,9 +245,7 @@ class opt_engine(object):
 
     def score(self, inst, nutr):
         """Return a fitness score and the originating score vector for the given
-        instance and it's nutrition space vector
-        """
-
+        instance and it's nutrition space vector."""
         assert len(inst) == self.foods.shape[0]
         assert len(nutr) == self.foods.shape[1]
         assert len(self.RDA) == len(self.UL) == len(nutr)
@@ -315,18 +315,17 @@ class opt_engine(object):
         return rnd_inst
 
     def crossover(self, inst1, inst2):
-        """Return a new instance via cross over with the 2 given instances
-        """
+        """Return a new instance via cross over with the 2 given instances."""
         return [x if rand() < 0.5 else y for x, y in zip(inst1, inst2)]
 
     def winner(self):
+        """Currently, chose a winner from the population with tournament sel."""
         idx1 = randrange(len(self.population))
         idx2 = randrange(len(self.population))
         return min(idx1, idx2)
 
     def generation(self):
-        """Do a single generation of work
-        """
+        """Do a single generation of work."""
         all_scored = []
         for inst, nutr in zip(self.population, self.popnutrition):
             score, score_vector = self.score(inst, nutr)
@@ -399,7 +398,7 @@ class opt_engine(object):
         for mic, amt in zip(ALL_MICROS, nutr):
             name, _, units, rda, ul = mic
             info("  NUTR %-15s: %8.2f %-5s, %8.2f%% of RDA %8.2f (UL %8.2f)",
-                         name,  amt, units, (amt/rda)*100.0, rda,      ul     #NOQA
+                         name,  amt, units, (amt/rda)*100.0, rda,      ul
             )
 
         total_cals = 0.0
@@ -429,8 +428,7 @@ class opt_engine(object):
 
 
 def food_scores(engine):
-    """Just output all foods that we allow with the score that you would get
-    """
+    """Just output all foods that we allow with the score that you would get."""
     one_hot = []
     for i in range(engine.food_count):
         one = [0.0] * engine.food_count
@@ -499,6 +497,7 @@ def main():
                 file_output("First Seen Generation %d", gen)
                 engine.dump_instance(food, nutr, info=file_output)
                 file_output('='*78)
+
 
 if __name__ == "__main__":
     main()

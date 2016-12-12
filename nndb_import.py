@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: latin_1 -*-
 
+# pylama:ignore=D203,D204,D205,D209,D400,E501,D213
+
 # Note that the file encoding we use is the same as the ASCII files -
 # see nndb_recs below
 
@@ -36,8 +38,8 @@ import functools
 
 class BulkFailure(Exception):
     """Custom bulk import failure exception"""
-
     pass
+
 
 try:
     import pymongo
@@ -63,7 +65,7 @@ UNIT_REPLACEMENTS = {
 
 
 def report_bulk(results):
-    """pretty print results and raise an exception if there is an error."""
+    """Pretty print results and raise an exception if there is an error."""
     from pprint import pprint
     pprint(results)
     if results.get('writeConcernErrors', []) or results.get('writeErrors', []):

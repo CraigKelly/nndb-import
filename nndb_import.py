@@ -47,7 +47,7 @@ except:
     sys.stderr.write("\n\nCould not import PyMongo - it is required\n\n")
     raise
 if (2, 6) > tuple([int(i) for i in getattr(pymongo, 'version', '0.0.0').split('.')][:2]):
-    sys.stderr.write("\n\nNeed at version 2.6 of PyMongo because we use bulk loading\n\n")
+    sys.stderr.write("\n\nNeed PyMongo version >= 2.6 - we use bulk loading\n\n")
     raise BulkFailure("PyMongo version too low")
 
 

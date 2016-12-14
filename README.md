@@ -1,5 +1,16 @@
 # nndb-import
 
+## Using this data
+
+If a flat file of food and ingredients with the most common nutrients is all
+you want, we've made that available at
+[data.world](https://data.world/craigkelly/steam-game-data)
+
+If you want a denormalized, integrated MongoDB database of the USDA's National
+Nutrient database, then please see below.
+
+## Using this code
+
 Import USDA National Nutrient Database ASCII files in to a MongoDB collection.
 
 We developed this small python against SR27. Those data files are available
